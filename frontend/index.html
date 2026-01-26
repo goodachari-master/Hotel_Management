@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Grand Stay | Hotel Management</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        :root {
+            --primary: #4361ee; --secondary: #3f37c9; --success: #4cc9f0;
+            --danger: #f72585; --bg: #f8f9fc; --text: #2b2d42; --sidebar: #1e1e2f;
+        }
+
+        body { font-family: 'Segoe UI', sans-serif; margin: 0; display: flex; background-color: var(--bg); color: var(--text); min-height: 100vh; }
+        nav { width: 260px; background-color: var(--sidebar); color: white; padding: 20px 0; flex-shrink: 0; }
+        .nav-logo { text-align: center; font-size: 1.5rem; font-weight: bold; margin-bottom: 40px; color: var(--success); }
+        .nav-item { padding: 15px 25px; cursor: pointer; transition: 0.3s; display: flex; align-items: center; gap: 15px; opacity: 0.7; }
+        .nav-item.active { background: rgba(255, 255, 255, 0.1); opacity: 1; border-left: 4px solid var(--success); }
+        
+        main { flex-grow: 1; padding: 40px; overflow-y: auto; }
+        .header-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; }
+        .card { background: white; border-radius: 12px; padding: 25px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 20px; }
+        
+        .grid { display: grid; grid-template-columns: 350px 1fr; gap: 25px; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: 600; font-size: 0.9em; }
+        input, select { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; }
+        button { background-color: var(--primary); color: white; border: none; padding: 12px; border-radius: 8px; cursor: pointer; font-weight: 600; width: 100%; }
+        
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th { text-align: left; padding: 12px; border-bottom: 2px solid #eee; background: #fdfdfd; }
+        td { padding: 12px; border-bottom: 1px solid #eee; }
+        .badge { padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; text-transform: uppercase; }
+        .badge-room { background: #e0e7ff; color: var(--primary); }
+        .badge-date { background: #ecfdf5; color: #059669; }
+    </style>
+</head>
+<body>
+
+    <nav>
+        <div class="nav-logo"><i class="fas fa-hotel"></i> GRAND STAY</div>
+        <div class="nav-item active"><i class="fas fa-tachometer-alt"></i> Dashboard</div>
+    </nav>
+
+    <main>
+        <div class="header-bar">
+            <h1>Property Management</h1>
+            <div id="status-indicator" style="color: green;">● System Online</div>
+        </div>
+
+        <div class="grid">
+            <div class="column">
+                <div class="card">
+                    <h3><i class="fas fa-plus-circle"></i> Add Room</h3>
+                    <input type="text" id="roomNumber" placeholder="Room # (e.g. 101)" style="margin-bottom:10px">
+                    <select id="roomType" style="margin-bottom:10px">
+                        <option value="Single">Single</option>
+                        <option value="Double">Double</option>
+                        <option value="Suite">Suite</option>
+                    </select>
+                    <input type="number" id="roomPrice" placeholder="Price per night" style="margin-bottom:10px">
+                    <button onclick="addRoom()">Add Room</button>
+                </div>
+
+                <div class="card">
+                    <h3><i class="fas fa-key"></i> New Booking</h3>
+                    <select id="roomSelect" style="margin-bottom:10px"><option value="">Loading Rooms...</option></select>
+                    <input type="text" id="customerName" placeholder="Guest Name" style="margin-bottom:10px">
+                    <label>Check In</label>
+                    <input type="date" id="checkInDate" style="margin-bottom:10px">
+                    <label>Check Out</label>
+                    <input type="date" id="checkOutDate" style="margin-bottom:10px">
+                    <button onclick="bookRoom()" style="background: var(--sidebar)">Confirm Booking</button>
+                </div>
+            </div>
+
+            <div class="column">
+                <div class="card">
+                    <h3><i class="fas fa-list"></i> Room Inventory</h3>
+                    <table>
+                        <thead><tr><th>Room</th><th>Type</th><th>Price</th><th>Action</th></tr></thead>
+                        <tbody id="roomTableBody"></tbody>
+                    </table>
+                </div>
+
+                <div class="card">
+                    <h3><i class="fas fa-history"></i> Recent Bookings</h3>
+                    <table>
+                        <thead><tr><th>Guest</th><th>Room</th><th>Stay Period</th><th>Status</th><th>Action</th></tr></thead>
+                        <tbody id="bookingTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        const API_BASE_URL = 'http://localhost:3001';
+
+        function formatDate(dateString) {
+            const date = new Date(dateString);
+            return date.toLocaleDateString('en-US', {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric'
+            });
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            loadRooms();
+            loadBookings();
+            setupDates();
+        });
+
+        function setupDates() {
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('checkInDate').value = today;
+        }
+
+        async function loadRooms() {
+            try {
+                const res = await fetch(`${API_BASE_URL}/rooms`);
+                const rooms = await res.json();
+                
+                const tableBody = document.getElementById('roomTableBody');
+                tableBody.innerHTML = rooms.length ? '' : '<tr><td colspan="4">No rooms available.</td></tr>';
+                
+                const select = document.getElementById('roomSelect');
+                select.innerHTML = '<option value="">Choose Room...</option>';
+
+                rooms.forEach(room => {
+                    tableBody.innerHTML += `
+                        <tr>
+                            <td><strong>${room.room_number}</strong></td>
+                            <td><span class="badge badge-room">${room.type}</span></td>
+                            <td>₹${room.price}</td>
+                            <td><button onclick="deleteRoom(${room.id})" style="width:auto; padding:5px 10px; background:var(--danger)">Delete</button></td>
+                        </tr>`;
+                    
+                    const opt = document.createElement('option');
+                    opt.value = room.id;
+                    opt.textContent = `Room ${room.room_number} (${room.type})`;
+                    select.appendChild(opt);
+                });
+            } catch (err) {
+                const statusIndicator = document.getElementById('status-indicator');
+                statusIndicator.style.color = "red";
+                statusIndicator.innerHTML = "● Server Offline";
+            }
+        }
+
+        async function loadBookings() {
+            try {
+                const res = await fetch(`${API_BASE_URL}/bookings`);
+                const bookings = await res.json();
+                const tableBody = document.getElementById('bookingTableBody');
+                tableBody.innerHTML = bookings.length ? '' : '<tr><td colspan="5">No bookings found.</td></tr>';
+
+                bookings.forEach(b => {
+                    tableBody.innerHTML += `
+                        <tr>
+                            <td><strong>${b.customer_name}</strong></td>
+                            <td>Room ${b.room_number || b.room_id}</td>
+                            <td><span class="badge badge-date">${formatDate(b.from_date)} to ${formatDate(b.to_date)}</span></td>
+                            <td><span style="color:green">Confirmed</span></td>
+                            <td><button onclick="cancelBooking(${b.id})" style="width:auto; padding:5px 10px; background:var(--danger); color:white; border:none; border-radius:4px;">Cancel</button></td>
+                        </tr>`;
+                });
+                
+                // Set status to online if successful
+                const statusIndicator = document.getElementById('status-indicator');
+                statusIndicator.style.color = "green";
+                statusIndicator.innerHTML = "● System Online";
+            } catch (err) { 
+                console.error("Error loading bookings", err);
+                const statusIndicator = document.getElementById('status-indicator');
+                statusIndicator.style.color = "red";
+                statusIndicator.innerHTML = "● Server Offline";
+            }
+        }
+
+        async function addRoom() {
+            const data = {
+                room_number: document.getElementById('roomNumber').value,
+                type: document.getElementById('roomType').value,
+                price: parseFloat(document.getElementById('roomPrice').value)
+            };
+            await fetch(`${API_BASE_URL}/rooms`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(data)
+            });
+            loadRooms();
+        }
+
+        async function bookRoom() {
+            const data = {
+                room_id: parseInt(document.getElementById('roomSelect').value),
+                customer_name: document.getElementById('customerName').value,
+                from_date: document.getElementById('checkInDate').value,
+                to_date: document.getElementById('checkOutDate').value
+            };
+
+            if (!data.room_id || !data.customer_name) return alert("Please fill all details");
+
+            const res = await fetch(`${API_BASE_URL}/bookings`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(data)
+            });
+
+            const resultText = await res.text();
+            if (res.status === 409) {
+                alert("⚠️ Error: Room is already booked for these dates!");
+            } else if (res.ok) {
+                alert("✅ Booking Confirmed!");
+                document.getElementById('customerName').value = '';
+                document.getElementById('roomSelect').value = '';
+                loadBookings();
+                loadRooms();
+            } else {
+                alert("❌ Error: " + resultText);
+            }
+        }
+
+        async function deleteRoom(id) {
+            if(confirm('Delete room?')) {
+                await fetch(`${API_BASE_URL}/rooms/${id}`, { method: 'DELETE' });
+                loadRooms();
+            }
+        }
+
+        async function cancelBooking(id) {
+            if(confirm('Cancel this booking?')) {
+                await fetch(`${API_BASE_URL}/bookings/${id}`, { method: 'DELETE' });
+                loadBookings();
+                loadRooms(); // Reload rooms to update availability
+            }
+        }
+    </script>
+</body>
+</html>
