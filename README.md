@@ -148,7 +148,7 @@ npm install axios
 ---
 
 
-## ▶️ Running the Application
+## 🚀 Running the Application
 
 
 ### 1️⃣ Start Backend Server
